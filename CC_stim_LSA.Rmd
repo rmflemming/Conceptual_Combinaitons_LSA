@@ -7,15 +7,59 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+require('tidyverse')
 require('lsa')
 require('LSAfun')
 
 ```
+## Word Pairs  
+```{r, import CC_stims}
+# Import word pairs. The data is coded in the following way
+# col 1- the first word of stimulus
+# col 2- the second word of the stimulus
+# col 3- 0 if 1st word is "Concrete", 1 if first word is "Abstract"
+# col 4- order of stimulus presentation. 0 indicates the example pair in "training"
+CC_stims <- read.csv(file='CC_stimuli_POA-5.csv',header=TRUE)
+str(CC_stims)
+```
 ## Comparison Corpi  
 We will use three comparison corpi, for validation purposes:  
-* Wonderland (included in LSAfun library, the smallest, most narrow of the corpi)  
-* British corpus  
-* Boulder corpus  
-```{r, import_corpi}
-
+* TASA - "Touchstone Applied Science Associates, Inc." A corpus of a broad set of topics and used to compile "The Educator's Word Frequency Guide." Built from >37.5k documents, and containing >92k different terms.  
+* EN_100k - The recommended space for computations in English. Absolutely massive (too big for me to venture downloading). ~2 Billion words, almost 5.4 million documents, with rows on 100k most frequent words. 5.4mill dimensions reduced to 300 via SVD.
+```{r, import_TASA}
+load("TASA.rda")
+TASA_mat = as.textmatrix(TASA)
 ```
+## LSA: Semantic Distance  
+The first two things I will look at are:  
+1) What are the magnitudes of the semantic distances between the first words and the second words of the stimulus pairs?  
+2) Are these cosine distances symmetric? (They should be)
+```{r, LSA_wi_pairs,message=FALSE}
+# First, let's just get a read of the semantic distances of the pairs
+for (i in 1:nrow(CC_stims)){ # For each CC stimulus
+  # compute cosine distance of the words in the ith pair
+  CC_stims$semantic_distance[i] = 1 - abs(Cosine(x=CC_stims$word1[i], 
+                                                 y=CC_stims$word2[i],tvectors=TASA_mat));
+  # same computation, but switch their places
+  CC_stims$semantic_distance2[i] = 1 - abs(Cosine(x=CC_stims$word2[i],
+                                                  y=CC_stims$word1[i],tvectors=TASA_mat));
+}
+CC_stims # look at the results
+```
+  
+The table shows us that the semantic distances of the stimuli range [`r range(CC_stims$semantic_distance)`], and that the distances, when computed by cosine distances are symmetric. Other distance metrics do allow for asymmetry.  
+Really quick, I am going to download the EN_100k LSA space, and run this same analysis to see if we get similar results. Due to the size, more sophisticated analysis ought to be done on another machine, if it involves storing this data while manipulating it or other vaiables...  
+```{r import_EN_100k,message=FALSE}
+rm(TASA,TAS_mat);
+load('EN_100k_lsa.rda');
+EN_100k = as.textmatrix(EN_100k_lsa);
+for (i in 1:nrow(CC_stims)){ # For each CC stimulus
+  # compute cosine distance of the words in the ith pair
+  CC_stims$semantic_distance2[i] = 1 - abs(Cosine(x=CC_stims$word2[i],
+                                                  y=CC_stims$word1[i],tvectors=EN_100k));
+}
+CC_stims
+```
+
+Woah!! We actually get way different, and richer results. There is more variability at the very lease. Maybe the TASA corpus is not appropriate for our word content. I would be more inclined to "trust" the EN_100k since it is so much larger and more general. Still, it is a tough quest to decide on an appropriate LSA space... Before tossing this out, let's have a look at the results just from these two and see if there is some correlation between them...  
+
