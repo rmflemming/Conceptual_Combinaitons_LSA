@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 require('tidyverse')
 require('lsa')
 require('LSAfun')
+require('reshape2')
+require('ggplot2')
 
 ```
 ## Word Pairs  
@@ -50,7 +52,6 @@ CC_stims # look at the results
 The table shows us that the semantic distances of the stimuli range [`r range(CC_stims$semantic_distance)`], and that the distances, when computed by cosine distances are symmetric. Other distance metrics do allow for asymmetry.  
 Really quick, I am going to download the EN_100k LSA space, and run this same analysis to see if we get similar results. Due to the size, more sophisticated analysis ought to be done on another machine, if it involves storing this data while manipulating it or other vaiables...  
 ```{r import_EN_100k,message=FALSE}
-rm(TASA,TAS_mat);
 load('EN_100k_lsa.rda');
 EN_100k = as.textmatrix(EN_100k_lsa);
 for (i in 1:nrow(CC_stims)){ # For each CC stimulus
@@ -62,4 +63,39 @@ CC_stims
 ```
 
 Woah!! We actually get way different, and richer results. There is more variability at the very lease. Maybe the TASA corpus is not appropriate for our word content. I would be more inclined to "trust" the EN_100k since it is so much larger and more general. Still, it is a tough quest to decide on an appropriate LSA space... Before tossing this out, let's have a look at the results just from these two and see if there is some correlation between them...  
+What I'm going to try to do next is to create the covariance matrix for each of the stimulus words in each of the spaces, then compare them to one another. The point of doing this would be to see if we can correctly identify "concrete" vs "abstract" words in the stimulus set.
 
+```{r get_simmats}
+# Separate out the words and their label (Abs, concrete)
+words = c(as.character(CC_stims$word1),as.character(CC_stims$word2));
+labels = c(CC_stims$abs1st,(1-abs(CC_stims$abs1st)));
+
+# Compute semantic simmilarity on all of the words
+words_simmat_EN_100k = abs(multicos(words,words,EN_100k));
+word_simmat_TASA = abs(multicos(words,words,TASA_mat));
+
+melted_EN100k = melt(words_simmat_EN_100k);
+melted_TASA = melt(word_simmat_TASA);
+
+ggplot(melted_EN100k, aes(x=Var1,y=Var2,fill=value)) + geom_tile()
+ggplot(melted_TASA, aes(x=Var1,y=Var2,fill=value)) + geom_tile()
+```
+Now, these huge matrices are a bit hard to interpret... Now, how can we look at their simmilarity? I'm going to start super simple and just ask: do the two LSA spaces show a consistent pattern of correlation? In other words, is there a positive relationship between the covariances calculated in TASA and EN_100k?  
+Here, I fit a simple lienar model:
+```{r fit_model,message=FALSE,echo=FALSE,results='hide'}
+x = melted_TASA$value; x = x[x != 1]; # remove autocorrelations
+y = melted_EN100k$value; y = y[y != 1];
+TASA2EN100k <- glm(formula=as.formula('y~x'),family="gaussian"); # define a logistic model
+glm.fit(x=x,y=y); # fit the model
+```
+Let's look at the results:  
+```{r report_model}
+# Report the coefficients
+TASA2EN100k$coefficients
+
+#Plot model fit
+ggplot(data=NULL,aes(x=x,y=y)) +geom_point() + geom_abline(slope=TASA2EN100k$coefficients[2],intercept = TASA2EN100k$coefficients[1])
+```
+I'm sure there is an easier way to visualize (and probably a better way to model) this, but from this we see that:  
+1) The TASA and EN_100k spaces predict *similar* covariances semantic distances for our stimulus set.  
+2) The EN_100k presents more variability in the distances, but both are "uninformative" in some regards where the other is informative. This contributes somewhat to the large residuals.
