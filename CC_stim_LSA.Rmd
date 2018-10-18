@@ -1,0 +1,21 @@
+---
+title: "LSA of Conceptual Combination Stimuli"
+author: "Rory Flemming"
+date: "October 17, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require('lsa')
+require('LSAfun')
+
+```
+## Comparison Corpi  
+We will use three comparison corpi, for validation purposes:  
+* Wonderland (included in LSAfun library, the smallest, most narrow of the corpi)  
+* British corpus  
+* Boulder corpus  
+```{r, import_corpi}
+
+```
