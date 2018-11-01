@@ -44,7 +44,7 @@ for (i in 1:nrow(CC_stims)){ # For each CC stimulus
                                                  y=CC_stims$word2[i],tvectors=TASA_mat));
   # same computation, but switch their places
   CC_stims$semantic_distance2[i] = 1 - abs(Cosine(x=CC_stims$word2[i],
-                                                  y=CC_stims$word1[i],tvectors=TASA_mat));
+                                                y=CC_stims$word1[i],tvectors=TASA_mat));
 }
 CC_stims # look at the results
 ```
@@ -77,8 +77,10 @@ word_simmat_TASA = abs(multicos(words,words,TASA_mat));
 melted_EN100k = melt(words_simmat_EN_100k);
 melted_TASA = melt(word_simmat_TASA);
 
-ggplot(melted_EN100k, aes(x=Var1,y=Var2,fill=value)) + geom_tile()
-ggplot(melted_TASA, aes(x=Var1,y=Var2,fill=value)) + geom_tile()
+ggplot(melted_EN100k, aes(x=Var1,y=Var2,fill=value)) +
+  geom_tile() + labs(title="Semantic Similarity Covmat - EN100k")
+ggplot(melted_TASA, aes(x=Var1,y=Var2,fill=value)) +
+  geom_tile() + labs(title="Semantic Similarity Covmat - TASA")
 ```
 Now, these huge matrices are a bit hard to interpret... Now, how can we look at their simmilarity? I'm going to start super simple and just ask: do the two LSA spaces show a consistent pattern of correlation? In other words, is there a positive relationship between the covariances calculated in TASA and EN_100k?  
 Here, I fit a simple lienar model:
@@ -93,9 +95,67 @@ Let's look at the results:
 # Report the coefficients
 TASA2EN100k$coefficients
 
+# Color mask
+abstract_labels = c(as.integer(CC_stims$abs1st),as.integer(!CC_stims$abs1st));#abs/conc for every word
+abstract_mat = outer(abstract_labels,abstract_labels,FUN="+"); # create matrix of combinations
+melted_abs = melt(abstract_mat); #melt to fit format
+melted_abs = as.array(melted_abs$value); # only use the value column (contains the actual labels)
+non_diag_mask = 1:length(melted_abs); non_diag_mask = non_diag_mask[(non_diag_mask%%(2*length(CC_stims$abs1st)))!=0]
+abstract_in_pair = melted_abs[non_diag_mask]# remove the diagonal values
+
+
 #Plot model fit
-ggplot(data=NULL,aes(x=x,y=y)) +geom_point() + geom_abline(slope=TASA2EN100k$coefficients[2],intercept = TASA2EN100k$coefficients[1])
+ggplot(data=NULL,aes(x=x,y=y,color=abstract_in_pair)) +
+  geom_point() + labs(x="Semantic Similarity in TASA",y="Semantic Similarity in EN100k", title="Semantic Similarity of Stimulus words") +
+  geom_abline(slope=TASA2EN100k$coefficients[2],intercept = TASA2EN100k$coefficients[1]) + lims(x=c(0,1),y=c(0,1))
 ```
-I'm sure there is an easier way to visualize (and probably a better way to model) this, but from this we see that:  
-1) The TASA and EN_100k spaces predict *similar* covariances semantic distances for our stimulus set.  
-2) The EN_100k presents more variability in the distances, but both are "uninformative" in some regards where the other is informative. This contributes somewhat to the large residuals.
+Cool!! There is possibly something interesting here. If we were to get the mean similarities for concrete-abstract pairs we would likely see that they are smallest, then concrete pairs, and finally abstract pairs. Next let's look at just our 13 pairs, and compare them to a set of test words that we have. These test words were selected because they have certain relationships that *could* inform our intuition regarding whether the relative distances of our stimuli could be meaningful.  
+```{r import_comparisons}
+test_pairs <- read.csv(file='CC_stim_comparisons.csv',header=TRUE)
+str(test_pairs)
+```
+These are our comparison pairs. Included for some of them is whether they are concrete or abstract pairs, and what the concreteness rating of each word is (only for some pairs). Let's get their semantic distances first, then we will append them to the stimulus pairs, and finally, we will add some other metadata that might be useful.  
+```{r test_pair_edit}
+for (i in 1:nrow(test_pairs)){
+  test_pairs$semantic_distance[i]  = 1 - abs(Cosine(x=test_pairs$word1[i],
+                                              y=test_pairs$word2[i],tvectors=TASA_mat));
+    test_pairs$semantic_distance2[i] = 1 - abs(Cosine(x=test_pairs$word1[i],
+                                              y=test_pairs$word2[i],tvectors=EN_100k));
+}
+test_pairs$synonym = c(1,0,1,-1,-1,-1,1,0,0);
+test_pairs$utility = c(1,1,1,0,0,0,1,0,0);
+test_pairs$context = c(0,1,1,0,0,0,0,0,0);
+test_pairs
+```
+First, let's look at the comparison of abstract-concrete pairs (and "mid-level" b&w pair):  
+```{r }
+ggplot(data=NULL,aes(x= 1-test_pairs$semantic_distance,
+                        y=1-test_pairs$semantic_distance2,color=test_pairs$abstractpair)) + geom_point() + labs(x="SS TASA",y="SS EN100k",title="Semantic Similarity of Concrete and Abstract Pairs")+lims(x=c(0,1),y=c(0,1))
+```
+Let's look at our stimuli...  
+```{r sd_stim}
+ggplot(data=NULL,aes(x=1-CC_stims$semantic_distance,y=1-CC_stims$semantic_distance2)) +geom_point() + labs(x="SS TASA",y="SS EN100k",title="Semantic Similarity of Stimuli words") + lims(x=c(0,1),y=c(0,1))
+```
+Let's look at synonyms vs antonyms and the pairs with no relations.
+```{r test_synonyms}
+ggplot(data=NULL,aes(x= 1-test_pairs$semantic_distance,
+                        y=1-test_pairs$semantic_distance2,color=test_pairs$synonym)) + geom_point() + labs(x="SS TASA",y="SS EN100k",title="Semantic Similarity of Synonyms & Antonyms")+lims(x=c(0,1),y=c(0,1))
+```
+Let's look at the pairs which might have similar utility/context  
+```{r }
+ggplot(data=NULL,aes(x= 1-test_pairs$semantic_distance,
+                      y=1-test_pairs$semantic_distance2,color=test_pairs$utility)) + geom_point() + labs(x="SS TASA",y="SS EN100k",title="Semantic Similarity of Utility Pairs")+lims(x=c(0,1),y=c(0,1))
+```
+And finally context:  
+```{r }
+ggplot(data=NULL,aes(x= 1-test_pairs$semantic_distance,
+                    y=1-test_pairs$semantic_distance2,color=test_pairs$context)) + geom_point() + labs(x="SS TASA",y="SS EN100k",title="Semantic Similarity of Context Pairs")+lims(x=c(0,1),y=c(0,1))
+```
+What about the distance in concreteness rating?  
+```{r }
+test_pairs$concrete_dif = abs(test_pairs$concretenes2 - test_pairs$concreteness1)
+ggplot(data=NULL,aes(x= (1-test_pairs$semantic_distance[1:7]),
+                      y=(1-test_pairs$semantic_distance2[1:7]),
+                     color= test_pairs$concrete_dif[1:7]))+ geom_point() + labs(x="SS TASA",y="SS EN100k",title="Semantic Similarity of Pairs")+lims(x=c(0,1),y=c(0,1)) + scale_color_continuous(name=expression(Delta*"Concreteness"))
+```
+A note: with so few exemplars it's really hard to say anything concrete (haha) about how these constructs work in this space. We know that 1) our stimuli have low semantic similarity (high semantic difference) compared to these example sets. Additionally, randomly select abstract-concrete mismatch pairs have smaller semantic similarity than matched pairs of either type (eye-ball test, we could run the statistics to actually test). It's uncertain whether abstract or concrete pairs have comparable semantic similarities, though from our earlier graphic, it appears that maye abstract pairs could be biased more similar than concrete, as "abstractness" itself is a viable point of similarity, more narrowly bounding than "concrete." One thing about these "analyses" is that they are rather high level, maybe not at the granularity we may desire. LSA uses a term x document matrix, which may be too far removed to get at the things we are interested in. It could be possible that using wordNet or a sentence2vec, paragraph2vec, or another, smaller moving window could provide a more informative and granular perspective.

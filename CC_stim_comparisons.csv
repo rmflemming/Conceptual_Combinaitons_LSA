@@ -1,0 +1,10 @@
+word1,word2,abstractpair,concreteness1,concretenes2
+sofa,couch,-1,4.9,4.71
+pencil,computer,-1,4.88,4.89
+shoe,boot,-1,4.97,5
+black,white,0,3.76,3.89
+real,fake,1,2.5,1.97
+truth,lie,1,1.96,3.11
+happiness,gladness,1,2.6,1.96
+waterfall,jacket,-1,NAN,NAN
+coconut,skateboard,-1,NAN,NAN
